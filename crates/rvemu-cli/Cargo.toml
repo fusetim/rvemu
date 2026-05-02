@@ -1,15 +1,11 @@
 [package]
-name = "rvemu"
+name = "rvemu-cli"
 version = "0.1.0"
-readme.workspace = true
-edition.workspace = true
 license.workspace = true
 authors.workspace = true
+edition.workspace = true
+readme.workspace = true
 repository.workspace = true
 
 [dependencies]
-paste = "1.0"
-
-[features]
-default = []
-std = []
+rvemu = { path = "../rvemu" }
