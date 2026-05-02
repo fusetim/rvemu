@@ -1,2 +1,10 @@
 [workspace]
 members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+license = "MIT OR Apache-2.0"
+authors = ["FuseTim <fusetim.log@gmx.com>"]
+edition = "2024"
+readme = "README.md"
+repository = "https://github.com/fusetim/rvemu"
