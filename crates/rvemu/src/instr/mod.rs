@@ -1,4 +1,5 @@
 use core::any::Any;
+use paste::paste;
 
 use crate::{data::{DoubleWord, MemoryController, Word}, instr::rtype::InstrR, reg::Regs32};
 
@@ -29,7 +30,34 @@ pub trait Execute {
     /// Execute will produce a number of steps to complete the execution of the instruction, 
     /// these steps will be executed one by one by the emulator, and each step is sure to complete
     /// in a finite amount of time, which enable nice features on the memory-side.
-    fn execute(&self) -> [InstrStep; 8];
+    /// 
+    /// # Arguments
+    /// 
+    /// * `steps` - A mutable reference to an array of 8 instruction steps, which will be filled with the
+    ///   steps to execute the instruction. 
+    /// 
+    /// # Returns
+    /// 
+    /// * `usize` - The number of steps that are filled in the steps array, this should be less than or equal to 8.
+    fn execute(&self, steps: &mut [InstrStep; 8]) -> usize;
+}
+
+#[macro_export]
+macro_rules! execute_one {
+    ($instr:ident, $instr_type:ty, |$instr_arg:ident, $regs_arg:ident, $state_arg:ident| $body:expr) => {
+        paste! {
+            impl Execute for $instr_type {
+                #[inline(always)]
+                fn execute(&self, steps: &mut [InstrStep; 8]) -> usize {
+                    fn [<execute_ $instr>]($instr_arg: Instr, $regs_arg: &mut Regs32, $state_arg: &mut InstrState) {
+                        $body
+                    }
+                    steps[0] = InstrStep::Call(&[<execute_ $instr>]);
+                    1 // Number of steps filled in the steps array
+                }
+            }
+        }
+    };
 }
 
 #[derive(PartialEq, Eq, Default)]
@@ -53,6 +81,7 @@ impl InstrState {
 
 /// Instruction step is a way to decompose an instruction into atomic steps that can be executed by the emulator, 
 /// one by one. Each step is sure to complete in a finite amount of time, which enable nice features on the memory-side.
+#[derive(Clone, Copy)]
 pub enum InstrStep {
     /// The simpler one is a call to an handle function, which is a static function that takes the 
     /// current state of the instruction and perform a finite-time operation on the virtual machine, such as performing
@@ -84,4 +113,10 @@ pub enum InstrStep {
     IncrementPC(Word),
     /// Jump to a certain address, this is used for control flow instructions such as jumps and branches.
     Jump(Word),
+}
+
+impl Default for InstrStep {
+    fn default() -> Self {
+        InstrStep::Noop
+    }
 }

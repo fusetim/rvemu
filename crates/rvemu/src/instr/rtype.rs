@@ -2,7 +2,7 @@
 use paste::paste;
 use core::ops::Deref;
 
-use crate::{instr::{Execute, Instr, InstrState, InstrStep}, reg::Regs32};
+use crate::{execute_one, instr::{Execute, Instr, InstrState, InstrStep}, reg::Regs32};
 
 /// R-type instruction format
 /// 
@@ -19,8 +19,11 @@ pub struct RType(u32);
 macro_rules! rtype_instr_field {
     ($field:ident, $offset:expr, $width:expr) => {
         paste! {
+            /// Offset of the $field field in the R-type instruction.
             pub const [<RTYPE_ $field:upper _OFFSET>]: u32 = $offset;
+            /// Width of the $field field in the R-type instruction.
             pub const [<RTYPE_ $field:upper _WIDTH>]: u32 = $width;
+            /// Mask for the $field field in the R-type instruction, used to extract the field value from the raw instruction word.
             pub const [<RTYPE_ $field:upper _MASK>]: u32 = ((1 << [<RTYPE_ $field:upper _WIDTH>]) - 1) << [<RTYPE_ $field:upper _OFFSET>];
             impl RType {
                 /// Extracts the $field field from the instruction, just masking it but without shifting it.
@@ -67,9 +70,14 @@ pub const RTYPE_OPCODE : u32 = 0b0110011;
 macro_rules! rtype_instr {
     ($mnemonic:ident, $func3:expr, $func7:expr) => {
         paste! {
+            /// Function code discriminent (funct3) for the $mnemonic R-type instruction.
             pub const [<RINSTR_ $mnemonic:upper _FUNCT3>]: u32 = $func3;
+            /// Function code discriminent (funct7) for the $mnemonic R-type instruction.
             pub const [<RINSTR_ $mnemonic:upper _FUNCT7>]: u32 = $func7;
 
+            /// [<$mnemonic:camel RInstr>] is a representation of the R-type instruction $mnemonic,
+            /// which includes methods for validating and matching the instruction based on 
+            /// its opcode, funct3, and funct7 fields.
             #[derive(Debug, Clone, Copy)]
             pub struct [<$mnemonic:camel RInstr>] (RType);
 
@@ -98,11 +106,13 @@ macro_rules! rtype_instr {
                     }
                 }
 
-                pub fn to_instr_r(self) -> InstrR {
+                /// Converts this instruction into the union type InstrR for easier handling in the emulator.
+                pub const fn to_instr_r(self) -> InstrR {
                     InstrR { $mnemonic: self }
                 }
 
-                pub fn to_instr(self) -> Instr {
+                /// Converts this instruction into the general Instr type, which can be used for execution.
+                pub const fn to_instr(self) -> Instr {
                     Instr { rtype: self.to_instr_r() }
                 }
             }
@@ -156,34 +166,40 @@ impl PartialEq for InstrR {
 
 impl Eq for InstrR {}
 
-impl Execute for AddRInstr {
-    #[inline(always)]
-    fn execute(&self) -> [InstrStep; 8] {
-        fn execute_add(instr: Instr, regs: &mut Regs32, _state: &mut InstrState) {
-            // Safety: instr is expected to be an AddRInstr
-            let instr = unsafe { instr.rtype.add };
-            let rs1_val = regs.read(instr.rs1() as usize);
-            let rs2_val = regs.read(instr.rs2() as usize);
-            let result = rs1_val.wrapping_add(rs2_val);
-            regs.write(instr.rd() as usize, result);
-            regs.inc_pc(4); // Increment PC by 4 to move to the next instruction
-        }
-        [
-            InstrStep::Call(&execute_add),
-            InstrStep::Noop,
-            InstrStep::Noop,
-            InstrStep::Noop,
-            InstrStep::Noop,
-            InstrStep::Noop,     
-            InstrStep::Noop,
-            InstrStep::Noop,
-        ]
-    }
+macro_rules! execute_rinstr {
+    ($instr:ident, $instr_type:ty, |$rs1_val:ident, $rs2_val:ident, $rd_val:ident| $body:expr) => {
+        execute_one!($instr, $instr_type, |instr, regs, _state| {
+            let instr = unsafe { instr.rtype.$instr };
+            let $rs1_val = regs.read(instr.rs1() as usize);
+            let $rs2_val = regs.read(instr.rs2() as usize);
+            let $rd_val = $body;
+            regs.write(instr.rd() as usize, $rd_val);
+            regs.inc_pc(4);
+        });
+    };
 }
+
+execute_rinstr!(add, AddRInstr, |rs1_val, rs2_val, rd_val| rs1_val.wrapping_add(rs2_val));
+execute_rinstr!(sub, SubRInstr, |rs1_val, rs2_val, rd_val| rs1_val.wrapping_sub(rs2_val));
+execute_rinstr!(sll, SllRInstr, |rs1_val, rs2_val, rd_val| rs1_val.wrapping_shl(rs2_val & 0x1F));
+execute_rinstr!(slt, SltRInstr, |rs1_val, rs2_val, rd_val| if (rs1_val as i32) < (rs2_val as i32) { 1 } else { 0 });
+execute_rinstr!(sltu, SltuRInstr, |rs1_val, rs2_val, rd_val| if rs1_val < rs2_val { 1 } else { 0 });
+execute_rinstr!(xor, XorRInstr, |rs1_val, rs2_val, rd_val| rs1_val ^ rs2_val);
+execute_rinstr!(srl, SrlRInstr, |rs1_val, rs2_val, rd_val| rs1_val.wrapping_shr(rs2_val & 0x1F));
+execute_rinstr!(sra, SraRInstr, |rs1_val, rs2_val, rd_val| ((rs1_val as i32).wrapping_shr(rs2_val & 0x1F)) as u32);
+execute_rinstr!(or, OrRInstr, |rs1_val, rs2_val, rd_val| rs1_val | rs2_val);
+execute_rinstr!(and, AndRInstr, |rs1_val, rs2_val, rd_val| rs1_val & rs2_val);
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const ADD_INSTRS: [AddRInstr; 3] = [
+                                            //  add rd, rs1, rs2
+        AddRInstr::new(0x004385b3),    //  add x0, x2, x4  |  x0 should stay zero
+        AddRInstr::new(0x00200233),    //  add x4, x0, x2  |  x4 <- x0 + x2
+        AddRInstr::new(0x004385b3),    //  add x11, x7, x4 |  x11 <- x7 + x4 
+    ];
 
     #[test]
     fn test_rtype_fields() {
@@ -198,21 +214,35 @@ mod tests {
 
     #[test]
     fn test_execute_add() {
-        let add_instr = AddRInstr::new(0b0000000_00010_00001_000_00011_0110011); // add x3, x1, x2
+        let instrs = ADD_INSTRS;
         let mut regs = Regs32::new();
-        regs.write(1, 5); // x1 = 5
-        regs.write(2, 10); // x2 = 10
+        regs.write(2, 2); // x2 = 2
+        regs.write(4, 4); // x4 = 4
+        regs.write(7, 7); // x7 = 7
+        regs.write(11, 0); // x11 = 0
 
-        let steps = add_instr.execute();
-        let instr = add_instr.to_instr();
-        let mut state = InstrState::new();
-        for step in steps.iter() {
-            match step {
-                InstrStep::Call(func) => func(instr, &mut regs, &mut state),
-                _ => {},
+        // Execute the instructions in order
+        let mut steps = [InstrStep::Noop; 8];
+        let mut steps_filled = 0;
+        while (regs.read_pc() as usize) < instrs.len() * 4 {
+            // Fetch the instruction at the current PC
+            let instr_index = (regs.read_pc() / 4) as usize;
+            let instr = instrs[instr_index];
+
+            steps_filled = instr.execute(&mut steps);
+            for step in &steps[0..steps_filled] {
+                match step {
+                    InstrStep::Call(func) => func(instr.to_instr(), &mut regs, &mut InstrState::default()),
+                    InstrStep::Jump(addr) => regs.write_pc(*addr),
+                    InstrStep::Noop => {},
+                    _ => panic!("Unexpected instruction step"),
+                }
             }
         }
-
-        assert_eq!(regs.read(3), 15); // x3 should be 15 after execution
+        assert_eq!(regs.read(0), 0); // x0 should stay at zero
+        assert_eq!(regs.read(4), 2); // x4 should be 2 after executing the second instruction
+        assert_eq!(regs.read(7), 7); // x7 should remain unchanged
+        assert_eq!(regs.read(11), 9); // x11 should be 9 after executing the third instruction
     }
+
 }
