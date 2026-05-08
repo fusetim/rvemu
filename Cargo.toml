@@ -10,4 +10,4 @@ readme = "README.md"
 repository = "https://github.com/fusetim/rvemu"
 
 [profile.release]
-opt-level = 0
+opt-level = 3

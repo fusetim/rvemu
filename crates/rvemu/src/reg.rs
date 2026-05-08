@@ -13,13 +13,36 @@ impl Regs32 {
         }
     }
 
+    pub const fn with_pc(pc: Word) -> Self {
+        Self {
+            regs: [0; 32],
+            pc,
+        }
+    }
+
+    /// Create a new Regs32 with the given register values and program counter.
+     /// 
+     /// # Arguments
+     /// 
+     /// * `regs` - An array of 32 Word values representing the initial state of the registers (x0 to x31).
+     /// * `pc` - A Word value representing the initial state of the program counter.
+     /// 
+     /// # Returns
+     /// 
+     /// A new instance of Regs32 initialized with the provided register values and program counter.
+     /// 
+     /// # Important
+     /// 
+     /// The x0 register is hardwired to zero in RISC-V, so any value provided for x0 in the `regs` array will be ignored
+     /// and treated as zero. The `write` method will also ensure that x0 remains zero regardless of any attempts to write to it.
+    pub const fn with(mut regs: [Word; 32], pc: Word) -> Self {
+        regs[0] = 0;
+        Self { regs, pc }
+    }
+
     #[inline(always)]
     pub fn read(&self, index: usize) -> Word {
-        if index == 0 {
-            0
-        } else {
-            self.regs[index]
-        }
+        self.regs[index]
     }
 
     #[inline(always)]

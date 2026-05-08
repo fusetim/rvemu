@@ -11,6 +11,7 @@ pub mod btype;
 pub mod jtype;
 
 #[derive(Clone, Copy)]
+#[repr(C)]
 pub union Instr {
     pub raw: u32,
     pub rtype: InstrR,
@@ -49,10 +50,11 @@ macro_rules! execute_one {
             impl Execute for $instr_type {
                 #[inline(always)]
                 fn execute(&self, steps: &mut [InstrStep; 8]) -> usize {
+                    #[inline(always)]
                     fn [<execute_ $instr>]($instr_arg: Instr, $regs_arg: &mut Regs32, $state_arg: &mut InstrState) {
                         $body
                     }
-                    steps[0] = InstrStep::Call(&[<execute_ $instr>]);
+                    steps[0] = InstrStep::Call([<execute_ $instr>]);
                     1 // Number of steps filled in the steps array
                 }
             }
@@ -86,7 +88,7 @@ pub enum InstrStep {
     /// The simpler one is a call to an handle function, which is a static function that takes the 
     /// current state of the instruction and perform a finite-time operation on the virtual machine, such as performing
     /// arithmetic operations, or wrtiting to a register.
-    Call(&'static dyn Fn(Instr, &mut Regs32, &mut InstrState)),
+    Call(fn(Instr, &mut Regs32, &mut InstrState) -> ()),
     /// No-op, this step does nothing, and can be used to represent the end of an instruction.
     Noop,
     /// Memory load byte from memory (RAM / ROM / MMIO peripherals), it will store the result inside
@@ -113,6 +115,8 @@ pub enum InstrStep {
     IncrementPC(Word),
     /// Jump to a certain address, this is used for control flow instructions such as jumps and branches.
     Jump(Word),
+    /// Invalid instruction encountered, this is used to represent an error state when an instruction is not recognized or cannot be executed.
+    TrapInvalidInstruction,
 }
 
 impl Default for InstrStep {
