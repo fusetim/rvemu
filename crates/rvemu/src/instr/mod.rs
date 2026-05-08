@@ -1,7 +1,6 @@
-use core::any::Any;
-use paste::paste;
+mod utils;
 
-use crate::{data::{DoubleWord, MemoryController, Word}, instr::rtype::InstrR, reg::Regs32};
+use crate::{data::{Word}, instr::{itype::InstrI, rtype::InstrR}, reg::Regs32};
 
 pub mod rtype;
 pub mod itype;
@@ -15,6 +14,7 @@ pub mod jtype;
 pub union Instr {
     pub raw: u32,
     pub rtype: InstrR,
+    pub itype: InstrI,
 }
 
 impl PartialEq for Instr {
@@ -60,6 +60,23 @@ macro_rules! execute_one {
             }
         }
     };
+}
+
+impl Execute for Instr {
+    #[inline(always)]
+    fn execute(&self, steps: &mut [InstrStep; 8]) -> usize {
+        let opcode = unsafe { self.raw } & 0x7F;
+        match opcode {
+            0x33 => unsafe { self.rtype.execute(steps) },
+            0x13 => unsafe { self.itype.execute(steps) },
+            _ => {
+                // For unrecognized opcodes, we can choose to either ignore them (treat them as no-ops) or treat them as invalid instructions.
+                // Here, we will treat them as invalid instructions and return a step that indicates an invalid
+                steps[0] = InstrStep::TrapInvalidInstruction;
+                1
+            }
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Default)]
