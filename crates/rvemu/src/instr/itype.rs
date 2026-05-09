@@ -1,9 +1,11 @@
-//! Dedicated module for I-type instruction format and related utilities.
+//! I-type instruction format and related utilities.
 use paste::paste;
 use core::ops::Deref;
-use super::utils::sign_extend;
+use super::utils::{sign_extend, instr_field};
+use super::execute_one;
 
-use crate::{execute_one, instr::{Execute, Instr, InstrState, InstrStep, itype}, reg::Regs32};
+
+use crate::{instr::{Execute, Instr, InstrState, InstrStep}, reg::Regs32};
 
 /// I-type instruction format
 /// 
@@ -19,45 +21,17 @@ use crate::{execute_one, instr::{Execute, Instr, InstrState, InstrStep, itype}, 
 #[derive(Debug, Clone, Copy)]
 pub struct IType(u32);
 
-/// I-type instruction field offsets, widths, and masks 
-/// These constants and methods are generated using the `itype_instr_field` macro for each field in the I-type instruction format.
-/// The macro generates constants for the offset, width, and mask of each field, as well as methods to extract the raw and shifted values of each field from an IType instruction.
-macro_rules! itype_instr_field {
-    ($field:ident, $offset:expr, $width:expr) => {
-        paste! {
-            /// Offset of the $field field in the I-type instruction.
-            pub const [<ITYPE_ $field:upper _OFFSET>]: u32 = $offset;
-            /// Width of the $field field in the I-type instruction.
-            pub const [<ITYPE_ $field:upper _WIDTH>]: u32 = $width;
-            /// Mask for the $field field in the I-type instruction, used to extract the field value from the raw instruction word.
-            pub const [<ITYPE_ $field:upper _MASK>]: u32 = ((1 << [<ITYPE_ $field:upper _WIDTH>]) - 1) << [<ITYPE_ $field:upper _OFFSET>];
-            impl IType {
-                /// Extracts the $field field from the instruction, just masking it but without shifting it.
-                #[inline(always)]
-                pub fn [<raw_ $field>](&self) -> u32 {
-                    self.0 & [<ITYPE_ $field:upper _MASK>]
-                }
-                /// Extracts the $field field from the instruction.
-                #[inline(always)]
-                pub fn $field(&self) -> u32 {
-                    self.[<raw_ $field>]() >> [<ITYPE_ $field:upper _OFFSET>]
-                }
-            }
-        }
-    };
-}
-
 // - I-type instruction field offsets, widths, and masks -
-itype_instr_field!(opcode, 0, 7);
-itype_instr_field!(rd, 7, 5);
-itype_instr_field!(funct3, 12, 3);
-itype_instr_field!(rs1, 15, 5);
-itype_instr_field!(imm, 20, 12);
+instr_field!(IType, opcode, 0, 7);
+instr_field!(IType, rd, 7, 5);
+instr_field!(IType, funct3, 12, 3);
+instr_field!(IType, rs1, 15, 5);
+instr_field!(IType, imm, 20, 12);
 
 // For shift instructions, the immediate field is split into shamt (shift amount) and funct7, 
 // where shamt occupies the lower 5 bits of the imm field, and funct7 occupies the upper 7 bits of the imm field.
-itype_instr_field!(funct7, 25, 7);
-itype_instr_field!(shamt, 20, 5); 
+instr_field!(IType, funct7, 25, 7);
+instr_field!(IType, shamt, 20, 5); 
 
 impl IType {
     /// Creates a new I-type instruction from a 32-bit word.

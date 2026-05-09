@@ -1,8 +1,10 @@
-//! Dedicated module for R-type instruction format and related utilities.
+//! R-type instruction format and related utilities.
 use paste::paste;
 use core::ops::Deref;
+use super::utils::instr_field;
+use super::execute_one;
 
-use crate::{execute_one, instr::{Execute, Instr, InstrState, InstrStep}, reg::Regs32};
+use crate::{instr::{Execute, Instr, InstrState, InstrStep}, reg::Regs32};
 
 /// R-type instruction format
 /// 
@@ -14,41 +16,13 @@ use crate::{execute_one, instr::{Execute, Instr, InstrState, InstrStep}, reg::Re
 #[derive(Debug, Clone, Copy)]
 pub struct RType(u32);
 
-/// R-type instruction field offsets, widths, and masks 
-/// These constants and methods are generated using the `rtype_instr_field` macro for each field in the R-type instruction format.
-/// The macro generates constants for the offset, width, and mask of each field, as well as methods to extract the raw and shifted values of each field from an RType instruction.
-macro_rules! rtype_instr_field {
-    ($field:ident, $offset:expr, $width:expr) => {
-        paste! {
-            /// Offset of the $field field in the R-type instruction.
-            pub const [<RTYPE_ $field:upper _OFFSET>]: u32 = $offset;
-            /// Width of the $field field in the R-type instruction.
-            pub const [<RTYPE_ $field:upper _WIDTH>]: u32 = $width;
-            /// Mask for the $field field in the R-type instruction, used to extract the field value from the raw instruction word.
-            pub const [<RTYPE_ $field:upper _MASK>]: u32 = ((1 << [<RTYPE_ $field:upper _WIDTH>]) - 1) << [<RTYPE_ $field:upper _OFFSET>];
-            impl RType {
-                /// Extracts the $field field from the instruction, just masking it but without shifting it.
-                #[inline(always)]
-                pub fn [<raw_ $field>](&self) -> u32 {
-                    self.0 & [<RTYPE_ $field:upper _MASK>]
-                }
-                /// Extracts the $field field from the instruction.
-                #[inline(always)]
-                pub fn $field(&self) -> u32 {
-                    self.[<raw_ $field>]() >> [<RTYPE_ $field:upper _OFFSET>]
-                }
-            }
-        }
-    };
-}
-
 // - R-type instruction field offsets, widths, and masks -
-rtype_instr_field!(opcode, 0, 7);
-rtype_instr_field!(rd, 7, 5);
-rtype_instr_field!(funct3, 12, 3);
-rtype_instr_field!(rs1, 15, 5);
-rtype_instr_field!(rs2, 20, 5);
-rtype_instr_field!(funct7, 25, 7);
+instr_field!(RType, opcode, 0, 7);
+instr_field!(RType, rd, 7, 5);
+instr_field!(RType, funct3, 12, 3);
+instr_field!(RType, rs1, 15, 5);
+instr_field!(RType, rs2, 20, 5);
+instr_field!(RType, funct7, 25, 7);
 
 impl RType {
     /// Creates a new R-type instruction from a 32-bit word.
@@ -306,7 +280,6 @@ mod tests {
             for step in &steps[0..steps_filled] {
                 match step {
                     InstrStep::Call(func) => func(instr.to_instr(), &mut regs, &mut InstrState::default()),
-                    InstrStep::Jump(addr) => regs.write_pc(*addr),
                     InstrStep::Noop => {},
                     _ => panic!("Unexpected instruction step"),
                 }
@@ -337,7 +310,6 @@ mod tests {
             for step in &steps[0..steps_filled] {
                 match step {
                     InstrStep::Call(func) => func(instr.to_instr(), &mut regs, &mut InstrState::default()),
-                    InstrStep::Jump(addr) => regs.write_pc(*addr),
                     InstrStep::Noop => {},
                     InstrStep::TrapInvalidInstruction => panic!("Invalid instruction encountered during execution, pc: 0x{:08x}, instr: 0x{:08x}", regs.read_pc(), unsafe { instr.raw }),
                     _ => panic!("Unexpected instruction step, pc: 0x{:08x}, instr: 0x{:08x}", regs.read_pc(), unsafe { instr.raw }),

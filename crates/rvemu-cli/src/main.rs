@@ -28,14 +28,20 @@ fn run(instrs: &[Instr], regs: &mut Regs32) {
         // Fetch the instruction at the current PC
         let instr_index = (regs.read_pc() / 4) as usize;
         let instr = instrs[instr_index];
+        let mut state = InstrState::new();
 
         steps_filled = instr.execute(&mut steps);
         for step in &steps[0..steps_filled] {
             match step {
                 InstrStep::Call(func) => {
-                    func(instr, regs, &mut InstrState::default())
+                    func(instr, regs, &mut state)
                 }
-                InstrStep::Jump(addr) => regs.write_pc(*addr),
+                InstrStep::Jump => {
+                    // JumpAddress is put in val_c of the InstrState by the instruction execution function, 
+                    // so we need to read it from there and write it to the PC register to perform the jump.
+                    println!("Jumping: from: 0x{:08x} to: 0x{:08x}", regs.read_pc(), state.val_c);
+                    regs.write_pc(state.val_c);
+                }
                 InstrStep::TrapInvalidInstruction => panic!("Invalid instruction encountered during execution, pc: 0x{:08x}, instr: 0x{:08x}", regs.read_pc(), unsafe { instr.raw }),
                 _ => panic!("Unexpected instruction step, pc: 0x{:08x}, instr: 0x{:08x}", regs.read_pc(), unsafe { instr.raw }),
             }

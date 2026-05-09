@@ -1,6 +1,6 @@
 mod utils;
 
-use crate::{data::{Word}, instr::{itype::InstrI, rtype::InstrR}, reg::Regs32};
+use crate::{data::{Word}, instr::{itype::InstrI, rtype::InstrR, btype::InstrB}, reg::Regs32};
 
 pub mod rtype;
 pub mod itype;
@@ -15,6 +15,7 @@ pub union Instr {
     pub raw: u32,
     pub rtype: InstrR,
     pub itype: InstrI,
+    pub btype: InstrB,
 }
 
 impl PartialEq for Instr {
@@ -43,7 +44,6 @@ pub trait Execute {
     fn execute(&self, steps: &mut [InstrStep; 8]) -> usize;
 }
 
-#[macro_export]
 macro_rules! execute_one {
     ($instr:ident, $instr_type:ty, |$instr_arg:ident, $regs_arg:ident, $state_arg:ident| $body:expr) => {
         paste! {
@@ -62,6 +62,8 @@ macro_rules! execute_one {
     };
 }
 
+pub(crate) use execute_one;
+
 impl Execute for Instr {
     #[inline(always)]
     fn execute(&self, steps: &mut [InstrStep; 8]) -> usize {
@@ -69,6 +71,7 @@ impl Execute for Instr {
         match opcode {
             0x33 => unsafe { self.rtype.execute(steps) },
             0x13 => unsafe { self.itype.execute(steps) },
+            0x63 => unsafe { self.btype.execute(steps) },
             _ => {
                 // For unrecognized opcodes, we can choose to either ignore them (treat them as no-ops) or treat them as invalid instructions.
                 // Here, we will treat them as invalid instructions and return a step that indicates an invalid
@@ -108,30 +111,8 @@ pub enum InstrStep {
     Call(fn(Instr, &mut Regs32, &mut InstrState) -> ()),
     /// No-op, this step does nothing, and can be used to represent the end of an instruction.
     Noop,
-    /// Memory load byte from memory (RAM / ROM / MMIO peripherals), it will store the result inside
-    /// the val_mem value of the instruction state.
-    MemoryLoadByte(Word),
-    /// Memory load half-word from memory (RAM / ROM / MMIO peripherals), it will store the result inside
-    /// the val_mem value of the instruction state.
-    MemoryLoadHalf(Word),
-    /// Memory load word from memory (RAM / ROM / MMIO peripherals), it will store the result inside
-    /// the val_mem value of the instruction state.
-    MemoryLoadWord(Word),
-    /// Memory load double word from memory (RAM / ROM / MMIO peripherals), it will store the result inside
-    /// the val_mem value of the instruction state.
-    MemoryLoadDoubleWord(Word),
-    /// Memory store byte to memory (RAM / ROM / MMIO peripherals), it will store the value to be stored inside the val_mem value of the instruction state.
-    MemoryStoreByte(Word),
-    /// Memory store half-word to memory (RAM / ROM / MMIO peripherals), it will store the value to be stored inside the val_mem value of the instruction state.
-    MemoryStoreHalf(Word),
-    /// Memory store word to memory (RAM / ROM / MMIO peripherals), it will store the value to be stored inside the val_mem value of the instruction state.
-    MemoryStoreWord(Word),
-    /// Memory store double word to memory (RAM / ROM / MMIO peripherals), it will store the value to be stored inside the val_mem value of the instruction state.
-    MemoryStoreDoubleWord(Word),
-    /// Increment the program counter by a certain value, this is used to move to the next instruction after the current one is executed.
-    IncrementPC(Word),
-    /// Jump to a certain address, this is used for control flow instructions such as jumps and branches.
-    Jump(Word),
+    /// Jump to address, stored in the val_c field of the InstrState, this is used for jump instructions to indicate the target address to jump to.
+    Jump,
     /// Invalid instruction encountered, this is used to represent an error state when an instruction is not recognized or cannot be executed.
     TrapInvalidInstruction,
 }
