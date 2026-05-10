@@ -1,6 +1,6 @@
 mod utils;
 
-use crate::{data::{Word}, instr::{itype::InstrI, rtype::InstrR, btype::InstrB}, reg::Regs32};
+use crate::{data::Word, instr::{btype::InstrB, itype::InstrI, jtype::{JalJInstr, JalrJInstr}, rtype::InstrR}, reg::Regs32};
 
 pub mod rtype;
 pub mod itype;
@@ -16,6 +16,8 @@ pub union Instr {
     pub rtype: InstrR,
     pub itype: InstrI,
     pub btype: InstrB,
+    pub jal: JalJInstr,
+    pub jalr: JalrJInstr,
 }
 
 impl PartialEq for Instr {
@@ -46,15 +48,15 @@ pub trait Execute {
 
 macro_rules! execute_one {
     ($instr:ident, $instr_type:ty, |$instr_arg:ident, $regs_arg:ident, $state_arg:ident| $body:expr) => {
-        paste! {
-            impl Execute for $instr_type {
+        paste::paste! {
+            impl crate::instr::Execute for $instr_type {
                 #[inline(always)]
-                fn execute(&self, steps: &mut [InstrStep; 8]) -> usize {
+                fn execute(&self, steps: &mut [crate::instr::InstrStep; 8]) -> usize {
                     #[inline(always)]
-                    fn [<execute_ $instr>]($instr_arg: Instr, $regs_arg: &mut Regs32, $state_arg: &mut InstrState) {
+                    fn [<execute_ $instr>]($instr_arg: Instr, $regs_arg: &mut crate::reg::Regs32, $state_arg: &mut crate::instr::InstrState) {
                         $body
                     }
-                    steps[0] = InstrStep::Call([<execute_ $instr>]);
+                    steps[0] = crate::instr::InstrStep::Call([<execute_ $instr>]);
                     1 // Number of steps filled in the steps array
                 }
             }
@@ -72,6 +74,8 @@ impl Execute for Instr {
             0x33 => unsafe { self.rtype.execute(steps) },
             0x13 => unsafe { self.itype.execute(steps) },
             0x63 => unsafe { self.btype.execute(steps) },
+            0x6F => unsafe { self.jal.execute(steps) },
+            0x67 => unsafe { self.jalr.execute(steps) },
             _ => {
                 // For unrecognized opcodes, we can choose to either ignore them (treat them as no-ops) or treat them as invalid instructions.
                 // Here, we will treat them as invalid instructions and return a step that indicates an invalid

@@ -34,7 +34,9 @@ fn run(instrs: &[Instr], regs: &mut Regs32) {
         for step in &steps[0..steps_filled] {
             match step {
                 InstrStep::Call(func) => {
-                    func(instr, regs, &mut state)
+                    print!("Executing instruction at pc: 0x{:08x}, instr: 0x{:08x}, ", regs.read_pc(), unsafe { instr.raw });
+                    func(instr, regs, &mut state);
+                    println!("next_pc: 0x{:08x}", regs.read_pc());
                 }
                 InstrStep::Jump => {
                     // JumpAddress is put in val_c of the InstrState by the instruction execution function, 

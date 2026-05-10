@@ -7,7 +7,7 @@ pub fn sign_extend(x: i32, nbits: u32) -> i32 {
 
 macro_rules! instr_field {
     ($instr_type:ty, $field:ident, $offset:expr, $width:expr) => {
-        paste! {
+        paste::paste! {
             /// Offset of the $field field in the R-type instruction.
             pub const [<$instr_type:upper _ $field:upper _OFFSET>]: u32 = $offset;
             /// Width of the $field field in the R-type instruction.

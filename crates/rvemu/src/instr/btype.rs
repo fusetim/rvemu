@@ -169,22 +169,20 @@ macro_rules! execute_binstr {
                 #[inline(always)]
                 fn execute(&self, steps: &mut [InstrStep; 8]) -> usize {
                     #[inline(always)]
-                    fn [<execute_ $instr>](instr: Instr, regs: &mut Regs32, state: &mut InstrState) {
+                    fn [<execute_ $instr>](instr: Instr, regs: &mut Regs32, _state: &mut InstrState) {
                         let instr_b = unsafe { instr.btype.$instr };
                         let $rs1_val = regs.read(instr_b.rs1() as usize);
                         let $rs2_val = regs.read(instr_b.rs2() as usize);
                         let pc = regs.read_pc();
                         let jump : bool = $predicate;
                         if jump {
-                            state.val_c = (pc as i32).wrapping_add(instr_b.imm()) as u32;
+                            regs.write_pc((pc as i32).wrapping_add(instr_b.imm()) as u32);
                         } else {
-                            state.val_c = pc.wrapping_add(4); // Next instruction address if not jumping
+                            regs.write_pc(pc.wrapping_add(4)); // Next instruction address if not jumping
                         }
                     }
                     steps[0] = InstrStep::Call([<execute_ $instr>]);
-                    // A jump will be performed at the end of the instruction execution, so we need to indicate that to the emulator by adding a Jump step after the Call step.
-                    steps[1] = InstrStep::Jump;
-                    2 // Number of steps filled in the steps array
+                    1 // Number of steps filled in the steps array
                 }
             }
         }
