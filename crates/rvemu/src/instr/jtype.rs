@@ -1,6 +1,6 @@
 //! J-type instructions and related utilities.
 
-use crate::instr::{self, Instr, execute_one, utils::sign_extend};
+use crate::instr::{Execute, Instr, InstrStep, execute_one, utils::sign_extend};
 
 use super::utils::instr_field;
 
@@ -50,8 +50,14 @@ impl JalJInstr {
         (imm20 | imm19_12 | imm11 | imm10_1) as i32
     }
 
+    pub const fn to_instr_j(self) -> InstrJ {
+        InstrJ { jal: self }
+    }
+
     pub const fn to_instr(self) -> Instr {
-        Instr { jal: self }
+        Instr {
+            jtype: self.to_instr_j(),
+        }
     }
 
     pub const fn expected_pattern(&self) -> u32 {
@@ -60,7 +66,7 @@ impl JalJInstr {
 }
 
 execute_one!(jal, JalJInstr, |instr, regs, _state| {
-    let instr = unsafe { instr.jal }; // Safe because we are sure that the instruction is indeed a JAL instruction when this function is called.
+    let instr = unsafe { instr.jtype.jal }; // Safe because we are sure that the instruction is indeed a JAL instruction when this function is called.
     let rd = instr.rd() as usize;
     let imm = instr.imm();
     // Write the return address (address of the next instruction) to rd
@@ -86,7 +92,7 @@ instr_field!(JalrJInstr, rs1, 15, 5);
 instr_field!(JalrJInstr, imm11_0, 20, 12);
 
 /// Opcode for JALR instruction.
-pub const JALR_OPCODE: u32 = 0b1101111;
+pub const JALR_OPCODE: u32 = 0b1100111;
 
 /// Mask for the differentiating fields of JALR instruction (opcode + funct3).
 pub const JALR_PATTERN_MASK: u32 = JALRJINSTR_OPCODE_MASK | JALRJINSTR_FUNCT3_MASK;
@@ -112,8 +118,14 @@ impl JalrJInstr {
         sign_extend(self.imm11_0() as i32, 12)
     }
 
+    pub const fn to_instr_j(self) -> InstrJ {
+        InstrJ { jalr: self }
+    }
+
     pub const fn to_instr(self) -> Instr {
-        Instr { jalr: self }
+        Instr {
+            jtype: self.to_instr_j(),
+        }
     }
 
     pub const fn expected_pattern(&self) -> u32 {
@@ -122,7 +134,7 @@ impl JalrJInstr {
 }
 
 execute_one!(jalr, JalrJInstr, |instr, regs, _state| {
-    let instr = unsafe { instr.jalr }; // Safe because we are sure that the instruction is indeed a JALR instruction when this function is called.
+    let instr = unsafe { instr.jtype.jalr }; // Safe because we are sure that the instruction is indeed a JALR instruction when this function is called.
     let rd = instr.rd() as usize;
     let rs1 = instr.rs1() as usize;
     let imm = instr.imm();
@@ -134,3 +146,53 @@ execute_one!(jalr, JalrJInstr, |instr, regs, _state| {
     // raise an exception if it's not the case, but for now we just ignore this detail.
     regs.write_pc(jump_address);
 });
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub union InstrJ {
+    pub raw: u32,
+    pub jal: JalJInstr,
+    pub jalr: JalrJInstr,
+}
+
+impl PartialEq for InstrJ {
+    fn eq(&self, other: &Self) -> bool {
+        unsafe { self.raw == other.raw }
+    }
+}
+
+impl InstrJ {
+    pub const fn new(word: u32) -> Self {
+        Self { raw: word }
+    }
+
+    pub const fn to_instr(self) -> Instr {
+        Instr { jtype: self }
+    }
+}
+
+impl Eq for InstrJ {}
+
+impl Execute for InstrJ {
+    fn execute(&self, steps: &mut [InstrStep; 8]) -> usize {
+        let opcode = unsafe { self.raw } & 0x7F;
+        match opcode {
+            JAL_OPCODE => unsafe { self.jal.execute(steps) },
+            JALR_OPCODE => {
+                let funct3 = unsafe { self.jalr.funct3() };
+                if funct3 == JALR_FUNCT3 {
+                    unsafe { self.jalr.execute(steps) }
+                } else {
+                    // If the funct3 doesn't match the expected value for JALR, we can treat it as an invalid instruction.
+                    steps[0] = InstrStep::TrapInvalidInstruction;
+                    1
+                }
+            }
+            _ => {
+                // If the instruction doesn't match any known I-type instruction pattern, we can treat it as an invalid instruction.
+                steps[0] = InstrStep::TrapInvalidInstruction;
+                1
+            }
+        }
+    }
+}

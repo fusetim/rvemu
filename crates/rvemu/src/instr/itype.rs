@@ -4,10 +4,7 @@ use super::utils::{instr_field, sign_extend};
 use core::ops::Deref;
 use paste::paste;
 
-use crate::{
-    instr::{Execute, Instr, InstrState, InstrStep},
-    reg::Regs32,
-};
+use crate::instr::{Execute, Instr, InstrStep};
 
 /// I-type instruction format
 ///

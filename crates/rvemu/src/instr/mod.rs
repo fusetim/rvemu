@@ -3,10 +3,11 @@ mod utils;
 use crate::{
     data::Word,
     instr::{
-        btype::InstrB,
-        itype::InstrI,
-        jtype::{JalJInstr, JalrJInstr},
-        rtype::InstrR,
+        btype::{BTYPE_OPCODE, InstrB},
+        itype::{ITYPE_OPCODE, InstrI},
+        jtype::{InstrJ, JAL_OPCODE, JALR_OPCODE},
+        rtype::{InstrR, RTYPE_OPCODE},
+        utype::{AUIPC_OPCODE, InstrU, LUI_OPCODE},
     },
     reg::Regs32,
 };
@@ -25,8 +26,8 @@ pub union Instr {
     pub rtype: InstrR,
     pub itype: InstrI,
     pub btype: InstrB,
-    pub jal: JalJInstr,
-    pub jalr: JalrJInstr,
+    pub jtype: InstrJ,
+    pub utype: InstrU,
 }
 
 impl PartialEq for Instr {
@@ -78,11 +79,11 @@ impl Execute for Instr {
     fn execute(&self, steps: &mut [InstrStep; 8]) -> usize {
         let opcode = unsafe { self.raw } & 0x7F;
         match opcode {
-            0x33 => unsafe { self.rtype.execute(steps) },
-            0x13 => unsafe { self.itype.execute(steps) },
-            0x63 => unsafe { self.btype.execute(steps) },
-            0x6F => unsafe { self.jal.execute(steps) },
-            0x67 => unsafe { self.jalr.execute(steps) },
+            RTYPE_OPCODE => unsafe { self.rtype.execute(steps) },
+            ITYPE_OPCODE => unsafe { self.itype.execute(steps) },
+            BTYPE_OPCODE => unsafe { self.btype.execute(steps) },
+            JAL_OPCODE | JALR_OPCODE => unsafe { self.jtype.execute(steps) },
+            AUIPC_OPCODE | LUI_OPCODE => unsafe { self.utype.execute(steps) },
             _ => {
                 // For unrecognized opcodes, we can choose to either ignore them (treat them as no-ops) or treat them as invalid instructions.
                 // Here, we will treat them as invalid instructions and return a step that indicates an invalid

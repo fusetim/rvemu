@@ -1,7 +1,7 @@
 //! B-type instruction format and related utilities.
 use super::utils::{instr_field, sign_extend};
 use crate::{
-    instr::{Execute, Instr, InstrState, InstrStep, btype},
+    instr::{Execute, Instr, InstrState, InstrStep},
     reg::Regs32,
 };
 use core::ops::Deref;
