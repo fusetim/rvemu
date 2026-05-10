@@ -1,13 +1,22 @@
 mod utils;
 
-use crate::{data::Word, instr::{btype::InstrB, itype::InstrI, jtype::{JalJInstr, JalrJInstr}, rtype::InstrR}, reg::Regs32};
+use crate::{
+    data::Word,
+    instr::{
+        btype::InstrB,
+        itype::InstrI,
+        jtype::{JalJInstr, JalrJInstr},
+        rtype::InstrR,
+    },
+    reg::Regs32,
+};
 
-pub mod rtype;
+pub mod btype;
 pub mod itype;
+pub mod jtype;
+pub mod rtype;
 pub mod stype;
 pub mod utype;
-pub mod btype;
-pub mod jtype;
 
 #[derive(Clone, Copy)]
 #[repr(C)]
@@ -22,26 +31,24 @@ pub union Instr {
 
 impl PartialEq for Instr {
     fn eq(&self, other: &Self) -> bool {
-        unsafe {
-            self.raw == other.raw
-        }
+        unsafe { self.raw == other.raw }
     }
 }
 
 impl Eq for Instr {}
 
 pub trait Execute {
-    /// Execute will produce a number of steps to complete the execution of the instruction, 
+    /// Execute will produce a number of steps to complete the execution of the instruction,
     /// these steps will be executed one by one by the emulator, and each step is sure to complete
     /// in a finite amount of time, which enable nice features on the memory-side.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `steps` - A mutable reference to an array of 8 instruction steps, which will be filled with the
-    ///   steps to execute the instruction. 
-    /// 
+    ///   steps to execute the instruction.
+    ///
     /// # Returns
-    /// 
+    ///
     /// * `usize` - The number of steps that are filled in the steps array, this should be less than or equal to 8.
     fn execute(&self, steps: &mut [InstrStep; 8]) -> usize;
 }
@@ -105,11 +112,11 @@ impl InstrState {
     }
 }
 
-/// Instruction step is a way to decompose an instruction into atomic steps that can be executed by the emulator, 
+/// Instruction step is a way to decompose an instruction into atomic steps that can be executed by the emulator,
 /// one by one. Each step is sure to complete in a finite amount of time, which enable nice features on the memory-side.
 #[derive(Clone, Copy)]
 pub enum InstrStep {
-    /// The simpler one is a call to an handle function, which is a static function that takes the 
+    /// The simpler one is a call to an handle function, which is a static function that takes the
     /// current state of the instruction and perform a finite-time operation on the virtual machine, such as performing
     /// arithmetic operations, or wrtiting to a register.
     Call(fn(Instr, &mut Regs32, &mut InstrState) -> ()),

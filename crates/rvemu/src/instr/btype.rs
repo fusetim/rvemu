@@ -1,11 +1,14 @@
 //! B-type instruction format and related utilities.
-use paste::paste;
+use super::utils::{instr_field, sign_extend};
+use crate::{
+    instr::{Execute, Instr, InstrState, InstrStep, btype},
+    reg::Regs32,
+};
 use core::ops::Deref;
-use super::utils::{sign_extend, instr_field};
-use crate::{instr::{Execute, Instr, InstrState, InstrStep, btype}, reg::Regs32};
+use paste::paste;
 
 /// B-type instruction format
-/// 
+///
 /// ```text
 /// 31        25   24   20 19   15 14    12 11        7  6    0
 /// imm[12|10:5]   rs2     rs1     funct3   imm[4:1|11]  opcode
@@ -38,7 +41,7 @@ impl BType {
     /// by concatenating imm[12], imm[10:5], imm[4:1], and imm[11].
     #[inline(always)]
     pub fn imm(&self) -> i32 {
-        // While this function does a lot of work, thanks to compiler optimization, this function becomes quite small 
+        // While this function does a lot of work, thanks to compiler optimization, this function becomes quite small
         // in instructions in practice.
         let imm12 = self.immh() >> 6; // imm[12] is the highest bit of immh
         let imm10_5 = self.immh() & 0x3F; // imm[10:5] are the lower 6 bits of immh
@@ -54,10 +57,10 @@ impl BType {
 
 /// Opcode for B-type instructions.
 /// This is a constant value that can be used to identify B-type instructions when decoding.
-pub const BTYPE_OPCODE : u32 = 0b1100011;
+pub const BTYPE_OPCODE: u32 = 0b1100011;
 
 /// Mask for the differentiating fields of B-type instructions (opcode, funct3).
-const B_TYPE_PATTERN_MASK : u32 = BTYPE_OPCODE_MASK | BTYPE_FUNCT3_MASK;
+const B_TYPE_PATTERN_MASK: u32 = BTYPE_OPCODE_MASK | BTYPE_FUNCT3_MASK;
 
 /// B-type instruction function codes for different operations.
 macro_rules! btype_instr {
@@ -67,7 +70,7 @@ macro_rules! btype_instr {
             pub const [<BTYPE_INSTR_ $mnemonic:upper _FUNCT3>]: u32 = $func3;
 
             /// [<$mnemonic:camel BInstr>] is a representation of the B-type instruction $mnemonic,
-            /// which includes methods for validating and matching the instruction based on 
+            /// which includes methods for validating and matching the instruction based on
             /// its opcode, funct3.
             #[derive(Debug, Clone, Copy)]
             #[repr(transparent)]
@@ -126,18 +129,18 @@ macro_rules! btype_instr {
     };
 }
 
-btype_instr!(beq,   0b000);
-btype_instr!(bne,   0b001);
-btype_instr!(blt,   0b100);
-btype_instr!(bge,   0b101);
-btype_instr!(bltu,  0b110);
-btype_instr!(bgeu,  0b111);
+btype_instr!(beq, 0b000);
+btype_instr!(bne, 0b001);
+btype_instr!(blt, 0b100);
+btype_instr!(bge, 0b101);
+btype_instr!(bltu, 0b110);
+btype_instr!(bgeu, 0b111);
 
 /// Union of all B-type instructions for easy matching and decoding.
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub union InstrB {
-    pub raw:    u32,
+    pub raw: u32,
     pub beq: BeqBInstr,
     pub bne: BneBInstr,
     pub blt: BltBInstr,
@@ -148,9 +151,7 @@ pub union InstrB {
 
 impl PartialEq for InstrB {
     fn eq(&self, other: &Self) -> bool {
-        unsafe {
-            self.raw == other.raw
-        }
+        unsafe { self.raw == other.raw }
     }
 }
 
@@ -159,7 +160,7 @@ impl Eq for InstrB {}
 impl InstrB {
     pub const fn to_instr(self) -> Instr {
         Instr { btype: self }
-    } 
+    }
 }
 
 macro_rules! execute_binstr {
@@ -191,8 +192,10 @@ macro_rules! execute_binstr {
 
 execute_binstr!(beq, BeqBInstr, |rs1_val, rs2_val| rs1_val == rs2_val);
 execute_binstr!(bne, BneBInstr, |rs1_val, rs2_val| rs1_val != rs2_val);
-execute_binstr!(blt, BltBInstr, |rs1_val, rs2_val| (rs1_val as i32) < (rs2_val as i32));
-execute_binstr!(bge, BgeBInstr, |rs1_val, rs2_val| (rs1_val as i32) >= (rs2_val as i32));
+execute_binstr!(blt, BltBInstr, |rs1_val, rs2_val| (rs1_val as i32)
+    < (rs2_val as i32));
+execute_binstr!(bge, BgeBInstr, |rs1_val, rs2_val| (rs1_val as i32)
+    >= (rs2_val as i32));
 execute_binstr!(bltu, BltuBInstr, |rs1_val, rs2_val| rs1_val < rs2_val);
 execute_binstr!(bgeu, BgeuBInstr, |rs1_val, rs2_val| rs1_val >= rs2_val);
 

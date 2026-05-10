@@ -5,7 +5,7 @@ use crate::instr::{self, Instr, execute_one, utils::sign_extend};
 use super::utils::instr_field;
 
 /// JAL instruction format
-/// 
+///
 /// ```text
 /// 31                     12 11   7 6    0
 /// imm[20|10:1|11|19:12]     rd     opcode
@@ -22,10 +22,10 @@ instr_field!(JalJInstr, imm19_12, 12, 8);
 instr_field!(JalJInstr, imm20, 31, 1);
 
 /// Opcode for JAL instruction.
-pub const JAL_OPCODE : u32 = 0b1101111;
+pub const JAL_OPCODE: u32 = 0b1101111;
 
 /// Mask for the differentiating fields of JAL instruction (opcode).
-pub const JAL_PATTERN_MASK : u32 = JALJINSTR_OPCODE_MASK;
+pub const JAL_PATTERN_MASK: u32 = JALJINSTR_OPCODE_MASK;
 
 impl JalJInstr {
     /// Creates a new JAL instruction from a 32-bit word.
@@ -70,7 +70,7 @@ execute_one!(jal, JalJInstr, |instr, regs, _state| {
 });
 
 /// JALR instruction format
-/// 
+///
 /// ```text
 /// 31       20 19   15 14    12 11   7 6    0
 /// imm[11:0]   rs1     funct3   rd     opcode
@@ -86,13 +86,13 @@ instr_field!(JalrJInstr, rs1, 15, 5);
 instr_field!(JalrJInstr, imm11_0, 20, 12);
 
 /// Opcode for JALR instruction.
-pub const JALR_OPCODE : u32 = 0b1101111;
+pub const JALR_OPCODE: u32 = 0b1101111;
 
 /// Mask for the differentiating fields of JALR instruction (opcode + funct3).
-pub const JALR_PATTERN_MASK : u32 = JALRJINSTR_OPCODE_MASK | JALRJINSTR_FUNCT3_MASK;
+pub const JALR_PATTERN_MASK: u32 = JALRJINSTR_OPCODE_MASK | JALRJINSTR_FUNCT3_MASK;
 
 /// Funct3 for JALR instruction.
-pub const JALR_FUNCT3 : u32 = 0b000;
+pub const JALR_FUNCT3: u32 = 0b000;
 
 impl JalrJInstr {
     /// Creates a new JALR instruction from a 32-bit word.
