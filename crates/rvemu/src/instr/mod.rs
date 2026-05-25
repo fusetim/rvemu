@@ -1,13 +1,10 @@
 mod utils;
+use crate::dbg;
 
 use crate::{
     data::Word,
     instr::{
-        btype::{BTYPE_OPCODE, InstrB},
-        itype::{ITYPE_OPCODE, InstrI},
-        jtype::{InstrJ, JAL_OPCODE, JALR_OPCODE},
-        rtype::{InstrR, RTYPE_OPCODE},
-        utype::{AUIPC_OPCODE, InstrU, LUI_OPCODE},
+        btype::{BTYPE_OPCODE, InstrB}, itype::{ITYPE_OPCODE, InstrI}, jtype::{InstrJ, JAL_OPCODE, JALR_OPCODE}, rtype::{InstrR, RTYPE_OPCODE}, stype::{InstrS, LOADSTYPE_OPCODE, STORESTYPE_OPCODE}, utype::{AUIPC_OPCODE, InstrU, LUI_OPCODE}
     },
     reg::Regs32,
 };
@@ -28,6 +25,7 @@ pub union Instr {
     pub btype: InstrB,
     pub jtype: InstrJ,
     pub utype: InstrU,
+    pub stype: InstrS,
 }
 
 impl PartialEq for Instr {
@@ -84,6 +82,7 @@ impl Execute for Instr {
             BTYPE_OPCODE => unsafe { self.btype.execute(steps) },
             JAL_OPCODE | JALR_OPCODE => unsafe { self.jtype.execute(steps) },
             AUIPC_OPCODE | LUI_OPCODE => unsafe { self.utype.execute(steps) },
+            LOADSTYPE_OPCODE | STORESTYPE_OPCODE => unsafe { self.stype.execute(steps) },
             _ => {
                 // For unrecognized opcodes, we can choose to either ignore them (treat them as no-ops) or treat them as invalid instructions.
                 // Here, we will treat them as invalid instructions and return a step that indicates an invalid
@@ -125,6 +124,33 @@ pub enum InstrStep {
     Noop,
     /// Jump to address, stored in the val_c field of the InstrState, this is used for jump instructions to indicate the target address to jump to.
     Jump,
+    /// Increment PC to the next 32 bits instruction, this is used for non-jump instructions to indicate that the program counter 
+    /// should be incremented to point to the next instruction.
+    IncPc32,
+    /// Load a unsigned byte from memory, the address to load from is stored in the val_c field of the InstrState, 
+    /// and the loaded value will be stored in the register given by the val_mem field of the InstrState.
+    MemLoadUnsignedByte,
+    /// Load a unsigned half-word from memory, the address to load from is stored in the val_c field of the InstrState, 
+    /// and the loaded value will be stored in the register given by the val_mem field of the InstrState.
+    MemLoadUnsignedHalf,
+    /// Load a word (32 bits) from memory, the address to load from is stored in the val_c field of the InstrState, 
+    /// and the loaded value will be stored in the register given by the val_mem field of the InstrState.
+    MemLoadWord,
+    /// Load a byte from memory, the address to load from is stored in the val_c field of the InstrState, 
+    /// and the loaded value will be stored in the register given by the val_mem field of the InstrState.
+    MemLoadByte,
+    /// Load a half-word from memory, the address to load from is stored in the val_c field of the InstrState, 
+    /// and the loaded value will be stored in the register given by the val_mem field of the InstrState.
+    MemLoadHalf,
+    /// Store a byte to memory, the address to store to is stored in the val_c field of the InstrState,
+    /// and the value to store is stored in the register given by the val_mem field of the InstrState.
+    MemStoreByte,
+    /// Store a half-word to memory, the address to store to is stored in the val_c field of the InstrState,
+    /// and the value to store is stored in the register given by the val_mem field of the InstrState.
+    MemStoreHalf,
+    /// Store a word (32 bits) to memory, the address to store to is stored in the val_c field of the InstrState,
+    /// and the value to store is stored in the register given by the val_mem field of the InstrState.
+    MemStoreWord,
     /// Invalid instruction encountered, this is used to represent an error state when an instruction is not recognized or cannot be executed.
     TrapInvalidInstruction,
 }
@@ -132,5 +158,25 @@ pub enum InstrStep {
 impl Default for InstrStep {
     fn default() -> Self {
         InstrStep::Noop
+    }
+}
+
+impl core::fmt::Debug for InstrStep {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            InstrStep::Call(func) => write!(f, "Call({:p})", *func),
+            InstrStep::Noop => write!(f, "Noop"),
+            InstrStep::Jump => write!(f, "Jump"),
+            InstrStep::IncPc32 => write!(f, "IncPc32"),
+            InstrStep::MemLoadUnsignedByte => write!(f, "MemLoadUnsignedByte"),
+            InstrStep::MemLoadUnsignedHalf => write!(f, "MemLoadUnsignedHalf"),
+            InstrStep::MemLoadWord => write!(f, "MemLoadWord"),
+            InstrStep::MemLoadByte => write!(f, "MemLoadByte"),
+            InstrStep::MemLoadHalf => write!(f, "MemLoadHalf"),
+            InstrStep::MemStoreByte => write!(f, "MemStoreByte"),
+            InstrStep::MemStoreHalf => write!(f, "MemStoreHalf"),
+            InstrStep::MemStoreWord => write!(f, "MemStoreWord"),
+            InstrStep::TrapInvalidInstruction => write!(f, "TrapInvalidInstruction"),
+        }
     }
 }

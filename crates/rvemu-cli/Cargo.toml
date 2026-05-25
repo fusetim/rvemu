@@ -8,4 +8,4 @@ readme.workspace = true
 repository.workspace = true
 
 [dependencies]
-rvemu = { path = "../rvemu" }
+rvemu = { path = "../rvemu", features = ["std"] }

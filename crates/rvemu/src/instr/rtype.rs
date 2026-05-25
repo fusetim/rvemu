@@ -243,7 +243,9 @@ impl Execute for InstrR {
 #[cfg(test)]
 mod tests {
     extern crate std;
-    use super::*;
+    use crate::{instr::InstrState, reg::Regs32};
+
+use super::*;
 
     const ADD_INSTRS: [AddRInstr; 3] = [
         //  add rd, rs1, rs2

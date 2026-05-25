@@ -23,7 +23,7 @@ const R_INSTRS: [Instr; 11] = [
 ];
 
 #[inline(never)]
-fn run(instrs: &[Instr], regs: &mut Regs32) {
+fn run(instrs: &[Instr], regs: &mut Regs32, mem: &mut [u8]) {
     let mut steps = [InstrStep::Noop; 8];
     let mut steps_filled;
     while (regs.read_pc() as usize) < instrs.len() * 4 {
@@ -37,7 +37,8 @@ fn run(instrs: &[Instr], regs: &mut Regs32) {
             match step {
                 InstrStep::Call(func) => {
                     print!(
-                        "Executing instruction at pc: 0x{:08x}, instr: 0x{:08x}, ",
+                        "Executing call step instruction ({:?}) at pc: 0x{:08x}, instr: 0x{:08x}, ",
+                        step,
                         regs.read_pc(),
                         unsafe { instr.raw }
                     );
@@ -59,8 +60,67 @@ fn run(instrs: &[Instr], regs: &mut Regs32) {
                     regs.read_pc(),
                     unsafe { instr.raw }
                 ),
-                _ => panic!(
-                    "Unexpected instruction step, pc: 0x{:08x}, instr: 0x{:08x}",
+                InstrStep::MemLoadWord => {
+                    let addr = state.val_c as usize;
+                    let rd = state.val_mem as usize;
+                    let value =  (mem[addr] as u32)
+                                    | ((mem[addr + 1] as u32) << 8)
+                                    | ((mem[addr + 2] as u32) << 16)
+                                    | ((mem[addr + 3] as u32) << 24);
+                    regs.write(rd, value);
+                },
+                InstrStep::MemLoadByte => {
+                    let addr = state.val_c as usize;
+                    let rd = state.val_mem as usize;
+                    let value = mem[addr] as i8 as i32 as u32; // Sign-extend the byte to 32 bits
+                    regs.write(rd, value);
+                },
+                InstrStep::MemLoadHalf => {
+                    let addr = state.val_c as usize;
+                    let rd = state.val_mem as usize;
+                    let value = (mem[addr] as u16) | ((mem[addr + 1] as u16) << 8);
+                    let value = value as i16 as i32 as u32; // Sign-extend the half-word to 32 bits
+                    regs.write(rd, value);
+                },
+                InstrStep::MemLoadUnsignedByte => {
+                    let addr = state.val_c as usize;
+                    let rd = state.val_mem as usize;
+                    let value = mem[addr] as u32; // Zero-extend the byte to 32 bits
+                    regs.write(rd, value);
+                },
+                InstrStep::MemLoadUnsignedHalf => {
+                    let addr = state.val_c as usize;
+                    let rd = state.val_mem as usize;
+                    let value = (mem[addr] as u16) | ((mem[addr + 1] as u16) << 8);
+                    let value = value as u32; // Zero-extend the half-word to 32 bits
+                    regs.write(rd, value);
+                },
+                InstrStep::MemStoreWord => {
+                    let addr = state.val_c as usize;
+                    let rs = state.val_mem as usize;
+                    let value = regs.read(rs);
+                    mem[addr] = (value & 0xFF) as u8;
+                    mem[addr + 1] = ((value >> 8) & 0xFF) as u8;
+                    mem[addr + 2] = ((value >> 16) & 0xFF) as u8;
+                    mem[addr + 3] = ((value >> 24) & 0xFF) as u8;
+                },
+                InstrStep::MemStoreByte => {
+                    let addr = state.val_c as usize;
+                    let rs = state.val_mem as usize;
+                    let value = regs.read(rs) as u8; // Take only the least significant byte
+                    mem[addr] = value;
+                },
+                InstrStep::MemStoreHalf => {
+                    let addr = state.val_c as usize;
+                    let rs = state.val_mem as usize;
+                    let value = regs.read(rs) as u16; // Take only the least significant half-word
+                    mem[addr] = (value & 0xFF) as u8;
+                    mem[addr + 1] = ((value >> 8) & 0xFF) as u8;
+                },
+                InstrStep::IncPc32 => regs.inc_pc(4),
+                other => panic!(
+                    "Unexpected instruction step {:?}, pc: 0x{:08x}, instr: 0x{:08x}",
+                    other,
                     regs.read_pc(),
                     unsafe { instr.raw }
                 ),
@@ -99,10 +159,22 @@ fn main() {
         0,
     );
 
-    run(&instrs, &mut regs);
+    let mut mem = vec![0u8; 1024]; // Dummy memory for testing, in a real emulator this would be the actual emulated memory space.
+
+    run(&instrs, &mut regs, &mut mem);
 
     // Print all registers
     for i in 0..32 {
         println!("r{} -> {:08x}", i, regs.read(i));
+    }
+
+    // Print the first 64 bytes of memory
+    for i in 0..16 {
+        let addr = i * 4;
+        let value = (mem[addr] as u32)
+            | ((mem[addr + 1] as u32) << 8)
+            | ((mem[addr + 2] as u32) << 16)
+            | ((mem[addr + 3] as u32) << 24);
+        println!("0x{:08x}: {:08x}", addr, value);
     }
 }
