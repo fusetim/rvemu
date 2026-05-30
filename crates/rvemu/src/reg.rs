@@ -1,5 +1,6 @@
 use crate::data::Word;
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Regs32 {
     regs: [Word; 32],
     pc: Word,

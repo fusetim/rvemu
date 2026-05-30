@@ -1,0 +1,13 @@
+ {
+     "version": "0.2.0",
+     "configurations": [
+         {
+             "name": "Launch",
+             "type": "lldb",
+             "request": "launch",
+             "program": "${workspaceRoot}/target/debug/rvemu-cli",
+             "args": ["/home/fusetim/Developing/by_year/2026/rvemu/examples/assets/small_s_instructions.bin"],
+             "cwd": "${workspaceRoot}",
+         }
+     ]
+ }
