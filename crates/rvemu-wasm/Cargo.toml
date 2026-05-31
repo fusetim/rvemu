@@ -1,0 +1,19 @@
+[package]
+name = "rvemu-wasm"
+version = "0.1.0"
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dlmalloc = { version = "0.2", optional = true, features = ["global"] }
+
+[features]
+default = ["dlmalloc"]
+std = []
+dlmalloc = ["dep:dlmalloc"]

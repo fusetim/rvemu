@@ -1,0 +1,9 @@
+[build]
+target = "wasm32v1-none"
+
+[target.wasm32v1-none]
+linker = "lld"
+rustflags = [
+    "-C", "target-feature=+bulk-memory,+sign-ext,+multivalue,+atomics,+mutable-globals",
+    "-C", "link-args=--export-memory",
+]

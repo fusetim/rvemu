@@ -1,0 +1,13 @@
+[package]
+name = "rvemu-wasm-gen"
+version = "0.1.0"
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[dependencies]
+walrus = { version = "0.26" }
+log = "0.4"
+env_logger = "0.11"
