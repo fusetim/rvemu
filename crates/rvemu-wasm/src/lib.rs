@@ -14,8 +14,7 @@ use core::{intrinsics::AtomicOrdering};
 
 pub mod shared_mem;
 
-#[unsafe(export_name = "FOO")]
-pub static mut FOO: i32 = 42;
+const EXECUTION_HALT : i32 = 0;
 
 #[link(wasm_import_module = "env")]
 unsafe extern "C" {
@@ -32,33 +31,33 @@ pub fn run() {
     shared_mem::store_word(0, 42);
     assert!(shared_mem::load_word(0) == 42, "Shared memory load/store failed");
 
-    //let buf = [0, 1, 2, 3, 4, 5, 6, 7];
-    //let copied = shared_mem::copyto(0, &buf);
-    //assert!(copied == buf.len(), "Shared memory copyto failed");
-    //let mut read_buf = [0; 8];
-    //let copied_back = shared_mem::copyfrom(0, &mut read_buf);
-    //assert!(copied_back == buf.len(), "Shared memory copyfrom failed");
-    //assert!(read_buf == buf, "Shared memory copy mismatch");
+    let buf = [0, 1, 2, 3, 4, 5, 6, 7];
+     for (i, &b) in buf.iter().enumerate() {
+        shared_mem::debug(i as i32);
+        shared_mem::debug(b as i32);
+    }
+    let copied = shared_mem::copyto(0, &buf);
+    assert!(copied == buf.len(), "Shared memory copyto failed");
+    let mut read_buf = [0; 8];
+    let copied_back = shared_mem::copyfrom(0, &mut read_buf);
+    shared_mem::debug(1101);
+    for (i, &b) in read_buf.iter().enumerate() {
+        shared_mem::debug(i as i32);
+        shared_mem::debug(b as i32);
+    }
+    assert!(copied_back == buf.len(), "Shared memory copyfrom failed");
+    assert!(read_buf == buf, "Shared memory copy mismatch");
 
     loop {
         unsafe {
             keepalive(i);
         }
-        atomic_wait(i, timeout_ns);
+        shared_mem::atomic_store(EXECUTION_HALT, i);
+        let wait_result = shared_mem::atomic_wait(EXECUTION_HALT, i, timeout_ns);
+        if wait_result == 0 {
+            // Woken up by a store to EXECUTION_HALT, time to halt execution
+            break;
+        }
         i+=1;
     }
-}
-
-#[cfg(target_arch = "wasm32")]
-#[target_feature(enable = "atomics")]
-fn atomic_wait(i: i32, timeout_ns: i64) {
-    unsafe {
-        core::intrinsics::atomic_store::<i32, { AtomicOrdering::Relaxed }>(&raw mut FOO, i);
-        core::arch::wasm32::memory_atomic_wait32(&raw mut FOO, i, timeout_ns);
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn atomic_wait(i: i32, timeout_ns: i64) {
-    // Fallback implementation for non-WASM targets
 }

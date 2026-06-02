@@ -1,56 +1,126 @@
 #[link(wasm_import_module = "shared_helper")]
 unsafe extern "C" {
     #[link_name = "shared_load_word"]
-    unsafe fn shared_load_word(offset: i32) -> i32;
+    unsafe fn __shared_load_word(offset: i32) -> i32;
 
     #[link_name = "shared_store_word"]
-    unsafe fn shared_store_word(offset: i32, value: i32);
+    unsafe fn __shared_store_word(offset: i32, value: i32);
 
     #[link_name = "shared_copyfrom"]
-    unsafe fn shared_copyfrom(dest_offset: i32, src_offset: i32, size: i32);
+    unsafe fn __shared_copyfrom(dest_offset: i32, src_offset: i32, size: i32);
 
     #[link_name = "shared_copyto"]
-    unsafe fn shared_copyto(dest_offset: i32, src_offset: i32, size: i32);
+    unsafe fn __shared_copyto(dest_offset: i32, src_offset: i32, size: i32);
+
+    #[link_name = "shared_atomic_wait"]
+    unsafe fn __shared_atomic_wait(offset: i32, expected: i32, timeout_ns: i64) -> i32;
+
+    #[link_name = "shared_atomic_store"]
+    unsafe fn __shared_atomic_store(offset: i32, value: i32);
+}
+
+#[link(wasm_import_module = "env")]
+unsafe extern "C" {
+    #[link_name = "debug"]
+    unsafe fn __debug(i: i32);
+}
+
+#[inline(always)]
+pub fn debug(i: i32) {
+    // SAFETY: This is a debug function provided by the host environment, it should be safe to call with any i32 value.
+    unsafe { __debug(i) }
 }
 
 /// Load a word from the shared memory at the given offset.
-#[inline(never)]
+#[inline(always)]
 pub fn load_word(offset: i32) -> i32 {
     assert!(offset % 4 == 0, "Offset must be a multiple of 4");
     assert!(offset >= 0, "Offset must be non-negative");
     assert!(offset < 65536, "Offset must be less than 65536 (64KB - page size)");
     // SAFETY: Offset is within the bounds of the shared memory and properly aligned.
-    unsafe { shared_load_word(offset) }
+    unsafe { __shared_load_word(offset) }
 }
 
 /// Store a word to the shared memory at the given offset.
-#[inline(never)]
+#[inline(always)]
 pub fn store_word(offset: i32, value: i32) {
     assert!(offset % 4 == 0, "Offset must be a multiple of 4");
     assert!(offset >= 0, "Offset must be non-negative");
     assert!(offset < 65536, "Offset must be less than 65536 (64KB - page size)");
     // SAFETY: Offset is within the bounds of the shared memory and properly aligned.
-    unsafe { shared_store_word(offset, value) }
+    unsafe { __shared_store_word(offset, value) }
 }
 
 /// Copy a block of memory from the shared memory in buffer
-pub fn copyfrom(src_offset: i32, buf: &mut [i32]) -> usize {
+#[inline(never)]
+pub fn copyfrom(src_offset: i32, buf: &mut [u8]) -> usize {
     assert!(src_offset >= 0, "Source offset must be non-negative");
     assert!(src_offset < 65536, "Source offset must be less than 65536 (64KB - page size)");
+    if buf.is_empty() {
+        return 0;
+    }
     let max_len = 65536 - src_offset as usize;
     let copy_len = buf.len().min(max_len);
+    let buf_start = buf.as_ptr() as i32;
+    // SAFETY: Enough items in the buffer, this points correctly to the last item.
+    let buf_last = unsafe { buf.as_ptr().add(copy_len - 1) } as i32;
+    // On wasm target, as the stack is emulated and grows downwards, 
+    // the buffer last item may be located at a lower address than the start offset.
+    // In this case, we need to copy backwards, otherwise we may write stupid things elsewhere.
+    let dest_offset = buf_start.min(buf_last);
+
+    debug(0011);
+    debug(copy_len as i32);
+    debug(src_offset);
+    debug(dest_offset);
     // SAFETY: Source offset and buffer length are within the bounds of the shared memory.
-    unsafe { shared_copyfrom(buf.as_mut_ptr() as i32, src_offset, copy_len as i32) }
+    unsafe { __shared_copyfrom(dest_offset, src_offset, copy_len as i32) }
     copy_len
 }
 
 /// Copy a block of memory from the buffer to the shared memory
-pub fn copyto(dest_offset: i32, buf: &[i32]) -> usize {
+#[inline(never)]
+pub fn copyto(dest_offset: i32, buf: &[u8]) -> usize {
     assert!(dest_offset >= 0, "Destination offset must be non-negative");
     assert!(dest_offset < 65536, "Destination offset must be less than 65536 (64KB - page size)");
+    if buf.is_empty() {
+        return 0;
+    }
     let max_len = 65536 - dest_offset as usize;
     let copy_len = buf.len().min(max_len);
+    let buf_start = buf.as_ptr() as i32;
+    // SAFETY: Enough items in the buffer, this points correctly to the last item.
+    let buf_last = unsafe { buf.as_ptr().add(copy_len - 1) } as i32;
+    // On wasm target, as the stack is emulated and grows downwards, 
+    // the buffer last item may be located at a lower address than the start offset.
+    // In this case, we need to copy backwards, otherwise we may write stupid things elsewhere.
+    let src_offset = buf_start.min(buf_last);
     // SAFETY: Destination offset and buffer length are within the bounds of the shared memory.
-    unsafe { shared_copyto(dest_offset, buf.as_ptr() as i32, copy_len as i32) }
+
+    debug(1100);
+    debug(copy_len as i32);
+    debug(src_offset);
+    debug(dest_offset);
+    unsafe { __shared_copyto(dest_offset, src_offset, copy_len as i32) }
     copy_len
+}
+
+/// Wait on an address of the shared memory until it changes from the expected value or timeouts.
+#[inline(always)]
+pub fn atomic_wait(offset: i32, expected: i32, timeout_ns: i64) -> i32 {
+    assert!(offset % 4 == 0, "Offset must be a multiple of 4");
+    assert!(offset >= 0, "Offset must be non-negative");
+    assert!(offset < 65536, "Offset must be less than 65536 (64KB - page size)");
+    // SAFETY: Offset is within the bounds of the shared memory and properly aligned.
+    unsafe { __shared_atomic_wait(offset, expected, timeout_ns) }
+}
+
+/// Store a word to the shared memory at the given offset.
+#[inline(always)]
+pub fn atomic_store(offset: i32, value: i32) {
+    assert!(offset % 4 == 0, "Offset must be a multiple of 4");
+    assert!(offset >= 0, "Offset must be non-negative");
+    assert!(offset < 65536, "Offset must be less than 65536 (64KB - page size)");
+    // SAFETY: Offset is within the bounds of the shared memory and properly aligned.
+    unsafe { __shared_atomic_store(offset, value) }
 }
