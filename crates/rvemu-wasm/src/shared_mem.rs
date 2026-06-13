@@ -19,18 +19,6 @@ unsafe extern "C" {
     unsafe fn __shared_atomic_store(offset: i32, value: i32);
 }
 
-#[link(wasm_import_module = "env")]
-unsafe extern "C" {
-    #[link_name = "debug"]
-    unsafe fn __debug(i: i32);
-}
-
-#[inline(always)]
-pub fn debug(i: i32) {
-    // SAFETY: This is a debug function provided by the host environment, it should be safe to call with any i32 value.
-    unsafe { __debug(i) }
-}
-
 /// Load a word from the shared memory at the given offset.
 #[inline(always)]
 pub fn load_word(offset: i32) -> i32 {
@@ -69,10 +57,6 @@ pub fn copyfrom(src_offset: i32, buf: &mut [u8]) -> usize {
     // In this case, we need to copy backwards, otherwise we may write stupid things elsewhere.
     let dest_offset = buf_start.min(buf_last);
 
-    debug(0011);
-    debug(copy_len as i32);
-    debug(src_offset);
-    debug(dest_offset);
     // SAFETY: Source offset and buffer length are within the bounds of the shared memory.
     unsafe { __shared_copyfrom(dest_offset, src_offset, copy_len as i32) }
     copy_len
@@ -97,10 +81,6 @@ pub fn copyto(dest_offset: i32, buf: &[u8]) -> usize {
     let src_offset = buf_start.min(buf_last);
     // SAFETY: Destination offset and buffer length are within the bounds of the shared memory.
 
-    debug(1100);
-    debug(copy_len as i32);
-    debug(src_offset);
-    debug(dest_offset);
     unsafe { __shared_copyto(dest_offset, src_offset, copy_len as i32) }
     copy_len
 }

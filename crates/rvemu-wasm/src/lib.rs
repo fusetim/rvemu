@@ -20,7 +20,17 @@ const EXECUTION_HALT : i32 = 0;
 unsafe extern "C" {
     #[link_name = "keepalive"]
     unsafe fn keepalive(i: i32);
+    #[link_name = "mem_debug"]
+    unsafe fn __mem_debug(tag: i32);
 }
+
+#[inline(always)]
+pub fn mem_debug(tag: i32) {
+    // SAFETY: This is a debug function provided by the host environment.
+    //         Any tag / value is okay to pass.
+    unsafe { __mem_debug(tag) }
+}
+
 
 #[unsafe(export_name = "run")]
 pub fn run() {
@@ -32,19 +42,13 @@ pub fn run() {
     assert!(shared_mem::load_word(0) == 42, "Shared memory load/store failed");
 
     let buf = [0, 1, 2, 3, 4, 5, 6, 7];
-     for (i, &b) in buf.iter().enumerate() {
-        shared_mem::debug(i as i32);
-        shared_mem::debug(b as i32);
-    }
+    mem_debug(0);
     let copied = shared_mem::copyto(0, &buf);
     assert!(copied == buf.len(), "Shared memory copyto failed");
+    mem_debug(1);
     let mut read_buf = [0; 8];
     let copied_back = shared_mem::copyfrom(0, &mut read_buf);
-    shared_mem::debug(1101);
-    for (i, &b) in read_buf.iter().enumerate() {
-        shared_mem::debug(i as i32);
-        shared_mem::debug(b as i32);
-    }
+    mem_debug(2);
     assert!(copied_back == buf.len(), "Shared memory copyfrom failed");
     assert!(read_buf == buf, "Shared memory copy mismatch");
 

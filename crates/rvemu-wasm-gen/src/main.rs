@@ -47,12 +47,6 @@ fn main() -> walrus::Result<()> {
         module.imports.delete(import_id);
     }
 
-    // Remove data segments (if any) since we don't need them and they might conflict with the shared memory
-    let data_ids = module.data.iter().map(|data| data.id()).collect::<Vec<_>>();
-    for data_id in data_ids {
-        module.data.delete(data_id);
-    }
-
     // Write the modified module to a new file
     module.emit_wasm_file(out)?;
 
