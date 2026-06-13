@@ -13,11 +13,49 @@ if (self.crossOriginIsolated) {
     console.log("Worker is NOT running in a cross-origin isolated environment. Shared memory may not work properly.");
 }
 
-self.postMessage({ type: IpcWorkerMessageType.Hello } as IpcWorkerMessage);
-
 const wasmPath = "/rvemu.wasm";
 const wasm = fetch(wasmPath, { mode: 'cors' });
 let wasmInstance: WebAssembly.Instance | null = null;
+let hostArena = [null] as any[]; // Start with a null entry to avoid using 0 as a valid handle
+let shared_mem: WebAssembly.Memory | null = null;
+const rom = await fetch("/small_s_instructions.bin").then(res => res.arrayBuffer().then(buf => new Uint8Array(buf)));
+
+self.postMessage({ type: IpcWorkerMessageType.Hello } as IpcWorkerMessage);
+
+function return_indirect(handle: number, len: number): number {
+    // Create a HostMemoryHandle object in the host environment's memory and return its handle (pointer).
+    let raw_handle = new Uint8Array(8);
+    raw_handle[0] = handle & 0xFF;
+    raw_handle[1] = (handle >> 8) & 0xFF;
+    raw_handle[2] = (handle >> 16) & 0xFF;
+    raw_handle[3] = (handle >> 24) & 0xFF;
+    raw_handle[4] = len & 0xFF;
+    raw_handle[5] = (len >> 8) & 0xFF;
+    raw_handle[6] = (len >> 16) & 0xFF;
+    raw_handle[7] = (len >> 24) & 0xFF;
+    const handlePtr = hostArena.length;
+    hostArena.push(raw_handle);
+    return handlePtr;
+}
+
+const rvemu_host = {
+    // Load the ROM bytes 
+    load_rom: () => {
+        // TODO: Ask for the ROM though IPC to the main thread, and wait for the response.
+        const length = rom.length; 
+        const handle = hostArena.length;
+        hostArena.push(rom);
+        console.debug(`load_rom() called, returning handle: ${handle}, length: ${length}`);
+        return return_indirect(handle, length);
+    },
+    // Hint from the emulator that the visible registers state is present and visible inside the shared_memory
+    hint_visible_registers_state: () => {
+        const registers_base_addr = 0x0000;
+        const registers_length = 4 * 33; // 32 registers + PC
+        const mem = new Uint32Array(shared_mem.buffer, registers_base_addr, registers_length/4);
+        console.info("Hint visible state:\nRegs:", mem.subarray(0, 32), "\nPC:", mem[32].toString(16).padStart(8, '0'));
+    }
+};
 
 function getMem() {
     if (!wasmInstance) {
@@ -29,15 +67,34 @@ function getMem() {
 function buildEnv(shared_mem: WebAssembly.Memory) {
     return  {
         shared_mem,
-        keepalive(arg: number) {
-            console.log(`Keepalive called with argument: ${arg}`);
+        obj_free: (handle: number) => {
+            // Free the object in the host arena
+            console.debug(`obj_free(handle: ${handle})`);
+            hostArena[handle] = undefined;
         },
-        mem_debug(tag: number) {
-            console.log("Memory debug (tag: ", tag, "):\nshared_mem:");
-            console.log(new Uint8Array(shared_mem.buffer));
-            console.log("memory:")
-            console.log(new Uint8Array(getMem().buffer));
-            console.log("End of memory debug");
+        obj_copyin: (ptr: number, len: number, handle: number) => {
+            // Copy an object (also known as a memory region) from the host environment to the wasm module's main memory.
+            console.debug(`obj_copyin(ptr: ${ptr}, len: ${len}, handle: ${handle})`);
+            const mem = new Uint8Array(getMem().buffer, ptr, len);
+            mem.set(new Uint8Array(hostArena[handle]));
+            return len; // Return the number of bytes copied           
+        },
+        obj_copyout: (ptr: number, len: number) => {
+            // Copy an object (also known as a memory region) from the wasm module's main memory to the host environment.
+            console.debug(`obj_copyout(ptr: ${ptr}, len: ${len})`);
+            const index = hostArena.length;
+            const mem = new Uint8Array(getMem().buffer, ptr, len);
+            hostArena.push(new Uint8Array(mem));
+            return index; // Return the handle to the copied object in the host arena
+        },
+        console_log: (handle: number) => {
+            const logData = hostArena[handle];
+            if (logData !== undefined && logData !== null) {
+                const logString = new TextDecoder().decode(logData);
+                console.info("[rvemu-wasm]", logString);
+            } else {
+                console.error("Invalid handle for console_log:", handle);
+            }
         }
     }
 };
@@ -47,10 +104,10 @@ onmessage = async (event: MessageEvent) => {
     console.log("Worker received message:", message.type);
 
     if (message.type === IpcClientMessageType.InitArgs) {
-        const shared_mem: WebAssembly.Memory = message.shared_mem;
+        shared_mem = message.shared_mem;
         // Here you can initialize your WebAssembly module with the shared memory.
         wasm.then(response => response.arrayBuffer())
-            .then(bytes => WebAssembly.instantiate(bytes, { env: buildEnv(shared_mem) }))
+            .then(bytes => WebAssembly.instantiate(bytes, { env: buildEnv(shared_mem), rvemu_host }))
             .then(result => {
                 wasmInstance = result.instance;
                 console.log("WebAssembly module instantiated successfully.");
