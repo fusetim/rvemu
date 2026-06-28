@@ -1,0 +1,64 @@
+/* Normalize it */
+
+html, * {
+ 	margin: 0;
+ 	padding: 0;
+ 	box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+ 	padding: 1rem;
+ 	box-sizing: border-box;
+}
+
+html, body {
+    color: var(--color-text);
+    font-family: 'Inter', sans-serif;
+}
+
+h1, h2, h3 {
+ 	font-weight: 600;
+}
+
+h4, h5, h6 {
+ 	font-weight: 500;
+}
+
+p {
+ 	font-weight: 400;
+}
+
+
+/* End Normalize it*/
+
+/* Color Theme */
+
+html {
+    --color-primary: #4f46e5;
+    --color-secondary: #facc15;
+    --color-background: #f3f4f6;
+    --color-text: #111827;
+}
+
+/* End Color Theme */
+
+body > header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    margin-top: 2rem;
+    flex-direction: column;
+
+    & h1 {
+        font-size: 2.5rem;
+        font-style: italic;
+    }
+
+    & p {
+        font-size: 1.5rem;
+        font-style: italic;
+    }
+}
+

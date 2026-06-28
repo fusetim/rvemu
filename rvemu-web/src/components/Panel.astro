@@ -1,0 +1,21 @@
+---
+import './Panel.css';
+
+export interface PanelProps {
+    title?: string;
+    titleChild?: any;
+    'class'?: string;
+    'id'?: string;
+};
+
+const props = Astro.props as PanelProps;
+---
+
+<section class:list={["panel", props.class]} id={props.id}>
+    <header>
+        {props.titleChild ? (<slot name="titleChild"/>) : (<h2>{props.title}</h2>)}
+    </header>
+    <div class="panel-content">
+        <slot/>
+    </div>
+</section>

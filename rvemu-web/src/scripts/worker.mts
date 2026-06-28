@@ -18,7 +18,7 @@ const wasm = fetch(wasmPath, { mode: 'cors' });
 let wasmInstance: WebAssembly.Instance | null = null;
 let hostArena = [null] as any[]; // Start with a null entry to avoid using 0 as a valid handle
 let shared_mem: WebAssembly.Memory | null = null;
-const rom = await fetch("/small_s_instructions.bin").then(res => res.arrayBuffer().then(buf => new Uint8Array(buf)));
+let rom = await fetch("/small_s_instructions.bin").then(res => res.arrayBuffer().then(buf => new Uint8Array(buf)));
 
 self.postMessage({ type: IpcWorkerMessageType.Hello } as IpcWorkerMessage);
 
@@ -50,10 +50,7 @@ const rvemu_host = {
     },
     // Hint from the emulator that the visible registers state is present and visible inside the shared_memory
     hint_visible_registers_state: () => {
-        const registers_base_addr = 0x0000;
-        const registers_length = 4 * 33; // 32 registers + PC
-        const mem = new Uint32Array(shared_mem.buffer, registers_base_addr, registers_length/4);
-        console.info("Hint visible state:\nRegs:", mem.subarray(0, 32), "\nPC:", mem[32].toString(16).padStart(8, '0'));
+        postMessage({ type: IpcWorkerMessageType.HintRegisterStateVisible } as IpcWorkerMessage);
     }
 };
 
@@ -91,6 +88,7 @@ function buildEnv(shared_mem: WebAssembly.Memory) {
             const logData = hostArena[handle];
             if (logData !== undefined && logData !== null) {
                 const logString = new TextDecoder().decode(logData);
+                postMessage({ type: IpcWorkerMessageType.ConsoleLog, logString } as IpcWorkerMessage);
                 console.info("[rvemu-wasm]", logString);
             } else {
                 console.error("Invalid handle for console_log:", handle);
@@ -112,14 +110,24 @@ onmessage = async (event: MessageEvent) => {
                 wasmInstance = result.instance;
                 console.log("WebAssembly module instantiated successfully.");
                 // You can now call functions from the WebAssembly instance as needed.
-                const { run } = wasmInstance.exports as any;
-                self.postMessage({ type: IpcWorkerMessageType.Running } as IpcWorkerMessage);
-                run();
+                self.postMessage({ type: IpcWorkerMessageType.Ready } as IpcWorkerMessage);
             })
             .catch(error => {
                 console.error("Error loading or instantiating WebAssembly module:", error);
                 self.postMessage({ type: IpcWorkerMessageType.InitFailed } as IpcWorkerMessage);
             }); 
+    } else if (message.type === IpcClientMessageType.LoadRom) {
+        rom = message.rom;
+    } else if (message.type === IpcClientMessageType.Start) {
+        if (wasmInstance) {
+            const run = wasmInstance.exports.run as Function;
+            self.postMessage({ type: IpcWorkerMessageType.Running } as IpcWorkerMessage);
+            run();
+            self.postMessage({ type: IpcWorkerMessageType.Completed } as IpcWorkerMessage);
+        } else {
+            console.error("Cannot start WebAssembly module: instance is not initialized.");
+            self.postMessage({ type: IpcWorkerMessageType.InitFailed } as IpcWorkerMessage);
+        }
     } else {
         console.log("Worker received unknown message type:", message.type);
     }

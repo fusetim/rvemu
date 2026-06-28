@@ -18,16 +18,124 @@ if (self.crossOriginIsolated) {
 const shared_mem = new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true });
 const worker = new Worker(new URL("worker.mts", import.meta.url), { type: 'module' });
 
-function shared_mem_interaction() {
-    // Example interaction with the shared memory.
-    const sharedArray = new Int32Array(shared_mem.buffer);
-    console.log("Shared memory contents before modification:", sharedArray);
+const statusEl = document.getElementById("status-value");
+const loadButton = document.getElementById("control-load") as HTMLButtonElement | null;
+const stepButton = document.getElementById("control-step") as HTMLButtonElement | null;
+const runButton = document.getElementById("control-run") as HTMLButtonElement | null;
+const resetButton = document.getElementById("control-reset") as HTMLButtonElement | null;
+const logsContentEl = document.querySelector("#sim-logs .panel-content") as HTMLElement | null;
 
-    // Modify the shared memory (for demonstration purposes).
-    Atomics.store(sharedArray, 0, 18); // Store the value 18 at index 0 in a thread-safe manner.
-    Atomics.notify(sharedArray, 0, 1); // Notify any waiting threads that the value has changed.
+function onHintRegisterStateVisible() {
+    // The worker has indicated that the visible registers state is available in the shared memory.
+    const registers_base_addr = 0x0000; // Base address of the registers in shared memory
+    const registers_length = 4 * 33; // 32 registers + PC
+    const mem = new Uint32Array(shared_mem.buffer, registers_base_addr, registers_length / 4);
+    console.info("Hint visible state:\nRegs:", mem.subarray(0, 32), "\nPC:", mem[32].toString(16).padStart(8, '0'));
 
-    console.log("Shared memory contents after modification:", sharedArray);
+    const registers_table = document.getElementById("registers-table") as HTMLTableElement | null;
+    for (let i = 0; i < 32; i++) {
+        const rowIndex = Math.floor(i / 8);
+        const colIndex = i % 8;
+        const cell = registers_table?.rows[rowIndex*2 + 1]?.cells[colIndex];
+        if (cell) {
+            cell.textContent = `0x${mem[i].toString(16).padStart(8, '0')}`;
+            cell.setAttribute("data-value", mem[i].toString());
+        }
+    }
+
+    const pc_value_span = document.getElementById("pc-value");
+    if (pc_value_span) {
+        pc_value_span.textContent = `0x${mem[32].toString(16).padStart(8, '0')}`;
+        pc_value_span.setAttribute("data-value", mem[32].toString());
+    }
+}
+
+function onReady() {
+    statusEl!.textContent = "Ready";
+    loadButton!.disabled = false;
+    stepButton!.disabled = true;
+    runButton!.disabled = true;
+    resetButton!.disabled = true;
+
+    loadButton!.addEventListener("click", onLoad);
+}
+
+function onLoad() {
+    if (loadButton?.disabled) return;
+    logsContentEl!.innerHTML = ""; // Clear logs
+    statusEl!.textContent = "Loading ROM...";
+    loadButton!.disabled = true;
+    stepButton!.disabled = true;
+    runButton!.disabled = true;
+    resetButton!.disabled = true;
+
+    // Open a file picker dialog to select a ROM file
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = ".bin"; // Accept only binary files
+    fileInput.onchange = async (event) => {
+        const file = (event.target as HTMLInputElement).files?.[0];
+        if (file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const romBytes = new Uint8Array(arrayBuffer);
+            console.log(`Loaded ROM file: ${file.name}, size: ${romBytes.length} bytes`);
+
+            // Send the ROM bytes to the worker
+            const loadRomMessage: IpcClientMessage = {
+                type: IpcClientMessageType.LoadRom,
+                rom: romBytes
+            };
+            worker.postMessage(loadRomMessage);
+
+            // Enable the start button after loading the ROM
+            statusEl!.textContent = "ROM Loaded. Ready to run.";
+            runButton!.disabled = false;
+            runButton!.addEventListener("click", onReset, { once: true });
+        } else {
+            console.warn("No ROM file selected.");
+            loadButton!.disabled = false;
+        }
+    }
+    fileInput.onabort = () => {
+        console.warn("ROM file selection was aborted.");
+        loadButton!.disabled = false;
+    }
+    fileInput.click(); // Trigger the file picker dialog
+}
+
+function onReset() {
+    if (resetButton?.disabled && runButton!.disabled) return;
+    logsContentEl!.innerHTML = ""; // Clear logs
+    statusEl!.textContent = "Loading ROM...";
+    loadButton!.disabled = true;
+    stepButton!.disabled = true;
+    runButton!.disabled = true;
+    resetButton!.disabled = false;
+
+    const startMessage: IpcClientMessage = {
+            type: IpcClientMessageType.Start,
+        };
+    worker.postMessage(startMessage);
+}
+
+
+function onRunning() {
+    statusEl!.textContent = "Running";
+    loadButton!.disabled = true;
+    stepButton!.disabled = true;
+    runButton!.disabled = true;
+    resetButton!.disabled = true;
+}
+
+function onCompleted() {
+    statusEl!.textContent = "Completed";
+    loadButton!.disabled = false;
+    stepButton!.disabled = true;
+    runButton!.disabled = true;
+    resetButton!.disabled = false;
+
+    loadButton!.addEventListener("click", onLoad);
+    resetButton!.addEventListener("click", onReset, { once: true });
 }
 
 worker.onmessage = (event: MessageEvent) => {
@@ -44,11 +152,25 @@ worker.onmessage = (event: MessageEvent) => {
         worker.postMessage(initMessage);
     } else if (message.type === IpcWorkerMessageType.InitFailed) {
         console.error("Worker failed to initialize the WebAssembly module.");
+    } else if (message.type === IpcWorkerMessageType.Ready) {
+        console.log("Worker is ready to start the WebAssembly module.");
+        onReady();
     } else if (message.type === IpcWorkerMessageType.Running) {
         console.log("Worker is running the WebAssembly module.");
-
-        setTimeout(() => shared_mem_interaction(), 4000); // Delay to ensure the worker has started running.
+        onRunning();
+    } else if (message.type === IpcWorkerMessageType.Completed) {
+        console.log("Worker has completed the WebAssembly module execution.");
+        onCompleted();
+    } else if (message.type === IpcWorkerMessageType.HintRegisterStateVisible) {
+        onHintRegisterStateVisible();
+    } else if (message.type === IpcWorkerMessageType.ConsoleLog) {
+        const logString = message.logString;
+        console.info("[Worker Log]", logString);
+        if (logsContentEl) {
+            logsContentEl.appendChild(document.createElement("p"));
+            logsContentEl.lastChild!.textContent = logString;
+        }
     } else {
-        console.log("Main thread received unknown message type from worker:", message.type);
+        console.log("Main thread received hint about visible register state from worker.");
     }
 }

@@ -1,19 +1,35 @@
 ---
+import './index.css';
+import Panel from "../components/Panel.astro";
+import BlankPage from "../layouts/BlankPage.astro";
+import type { BlankPageProps } from "../layouts/BlankPage.astro";
+import Visualizer from '../components/Visualizer.astro';
+import Controls from '../components/Controls.astro';
+import RegisterView from '../components/RegisterView.astro';
+import SimLogs from '../components/SimLogs.astro';
 
+const pageprops = {
+	title: "rvemu",
+} as BlankPageProps;
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-	<script src="../scripts/index.mts">
-	</script>
-</html>
+<BlankPage {...pageprops}>
+	<header>
+		<h1>rvemu</h1>
+		<p>RISC-V RV32I Simulator for simple MCU projects in your browser!</p>
+	</header>
+	<main id="sim" class="container">
+		<div class="panel-col">
+			<Visualizer>
+			</Visualizer>
+			<RegisterView />
+		</div>
+		<aside class="panel-col">
+			<Controls>
+			</Controls>
+			<SimLogs></SimLogs>
+			<Panel title="Instruction Viewer" />
+		</aside>
+	</main>
+	<script src="../scripts/index.mts"></script>
+</BlankPage>

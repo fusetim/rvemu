@@ -1,0 +1,24 @@
+---
+import Panel from './Panel.astro';
+---
+
+<Panel title="Visualizer" class="visualizer">
+    <p>TODO: Visualizer content goes here.</p>
+</Panel>
+
+<style is:global>
+    .visualizer .panel-content {
+        aspect-ratio: 2;
+        width: 100%;
+        background-color: #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        
+        & p {
+            font-size: 1.2rem;
+            color: #888;
+            font-family: monospace;
+        }
+    }
+</style>

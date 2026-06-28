@@ -1,0 +1,60 @@
+---
+import Panel from "./Panel.astro";
+---
+
+<Panel title="Controls" class="controls">
+    <div class="status">
+        <code>
+                <p><strong>Status:</strong> <span id="status-value">Loading WASM simulator...</span></p>
+                <p><strong>Cycles:</strong> <span id="cycle-count">0</span></p>
+        </code>
+    </div>
+    <div class="button-bar">
+        <button id="control-load" disabled>Load</button>
+        <button id="control-step" disabled>Step</button>
+        <button id="control-run" disabled>Run</button>
+        <button id="control-reset" disabled>Reset</button>
+    </div>
+</Panel>
+
+<style is:global>
+    .controls {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .controls .status code {
+        display: block;
+        background-color: #f0f0f0;
+        padding: 0.5rem;
+        & p {
+            margin: 0.2rem 0;
+            font-family: monospace;
+        }
+    }
+
+    .controls .button-bar {
+        display: flex;
+        gap: 0.5rem;
+        & button {
+            flex: 1;
+            padding: 0.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: #5100ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            transition: background-color 0.1s ease;
+
+            &:hover {
+                background-color: #2700b3;
+            }
+            &:disabled {
+                background-color: #ccc;
+                cursor: not-allowed;
+            }
+        }
+    }
+</style>
