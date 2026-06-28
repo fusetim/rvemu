@@ -13,12 +13,12 @@ if (self.crossOriginIsolated) {
     console.log("Worker is NOT running in a cross-origin isolated environment. Shared memory may not work properly.");
 }
 
-const wasmPath = "/rvemu.wasm";
+const wasmPath = "/rvemu/rvemu.wasm";
 const wasm = fetch(wasmPath, { mode: 'cors' });
 let wasmInstance: WebAssembly.Instance | null = null;
 let hostArena = [null] as any[]; // Start with a null entry to avoid using 0 as a valid handle
 let shared_mem: WebAssembly.Memory | null = null;
-let rom = await fetch("/small_s_instructions.bin").then(res => res.arrayBuffer().then(buf => new Uint8Array(buf)));
+let rom = Uint8Array.from([]); // Initialize with an empty ROM
 
 self.postMessage({ type: IpcWorkerMessageType.Hello } as IpcWorkerMessage);
 
